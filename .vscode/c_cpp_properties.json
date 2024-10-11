@@ -1,0 +1,21 @@
+{
+  "configurations": [
+    {
+      "name": "Linux",
+      "includePath": [
+        "${workspaceFolder}/**",
+        "/usr/local/cuda/include",
+        "/root/anaconda3/envs/atom/lib/python3.10/site-packages/torch/include",
+        "/root/anaconda3/envs/atom/lib/python3.10/site-packages/torch/include/torch/csrc/api/include",
+        "/root/anaconda3/envs/atom/lib/python3.10/site-packages/torch/include/torch/csrc/api/include",
+        "/root/anaconda3/envs/atom/include/python3.10"
+      ],
+      "defines": [],
+      "compilerPath": "/usr/bin/gcc",
+      "cStandard": "c20",
+      "cppStandard": "gnu++20",
+      "intelliSenseMode": "linux-gcc-x64"
+    }
+  ],
+  "version": 4
+}

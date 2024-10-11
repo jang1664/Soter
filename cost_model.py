@@ -19,6 +19,8 @@ class Timeloop(object):
         self.accelerator = accelerator
         self.out_config_path = out_config_path
         self.use_sparse = use_sparse
+
+        # export yaml file for timeloop
         with open(os.path.join(in_config_path, accelerator, 'arch.yaml'), 'r') as fd:
             self.arch = yaml.load(fd, Loader=yaml.SafeLoader)
         fd.close()
@@ -36,6 +38,7 @@ class Timeloop(object):
                 self.sparse = yaml.load(fd,Loader=yaml.SafeLoader)
             fd.close()
 
+        # parse arch structure
         buffer_name_list, buffer_size_list, buffer_spmap_cstr, num_buffer_levels, num_pes = self.get_arch_info()
         self.buffer_name_list = buffer_name_list
         self.buffer_size_list = buffer_size_list
@@ -52,16 +55,20 @@ class Timeloop(object):
         self.dim2note = {0: 'R', 1: 'S', 2: 'P', 3: 'Q', 4: 'C', 5: 'K', 6: 'H', 7: 'N'}
         print(self.dim2note.values())
         self.dimension, self.dimension_dict = self.get_problem_info()
+
+        # get prime factors. Dictionary, key:dim_idx, value:dict[num : count]
         self.dimension_prime = {key: self.get_prime_factors(self.dimension_dict[key]) for key in self.dim2note.values()}
 
+        # assign idx to each prime
+        #TODO: why all dimension mixed?
         self.prime2idx = {}
         primes = set()
         for i, key in enumerate(self.dim2note.values()):
             tile_budget = self.dimension_prime[key]
             for k in tile_budget.keys():
                 primes.add(int(k))
-        primes = sorted(primes)
-        self.prime2idx = {'{}'.format(pf): i for i, pf in enumerate(primes)}
+        primes = sorted(primes) # For all variables, gather prime factors.
+        self.prime2idx = {'{}'.format(pf): i for i, pf in enumerate(primes)} # assign idx to each prime
         self.num_primes = len(self.prime2idx.keys())
 
         self.arch_path, self.problem_path, self.map_path, self.sparse_path, self.pool_path = [], [], [], [], []
@@ -433,28 +440,29 @@ class Timeloop(object):
         return problem
 
     def get_map_config(self, program):
+        # make map.yaml from program tensor
         steps_per_level = len(self.dim2note.values())
         mapping = []
         # self.check_tile_fit_buffer(program)
         num_primes = len(self.prime2idx.keys())
         for level in range(1, self.num_buffer_level+1):
             target = self.buffer_name_list[f'l{level}']
-            level_program = program[(level-1)*steps_per_level:level*steps_per_level,:]
+            level_program = program[(level-1)*steps_per_level:level*steps_per_level,:] # (steps_per_level, 2*num_primes+1)
             par_dims = set()
-            perm_list = copy.deepcopy(list(self.dim2note.values()))
+            perm_list = copy.deepcopy(list(self.dim2note.values())) # dimension name list
             tile_sizes_dict = {}
             sp_tile_sizes_dict = {}
             for i in range(steps_per_level):
                 # note = dim2note[level_program[i, 0]]
-                order = level_program[i, 0]
+                order = level_program[i, 0] # order of current step. current loop indvar order.
                 note = self.dim2note[i]
-                perm_list[order] = note
-                if level_program[i, num_primes + 1] >= 1:
+                perm_list[order] = note # update order from dimension name like N- > M -> K ...
+                if level_program[i, num_primes + 1] >= 1: # temporal loop is more than 1?
                     par_dims.add(note)
                 tile_sizes_dict[note] = 1
                 for k, v in self.prime2idx.items():
-                    tile_sizes_dict[note] *= pow(int(k), level_program[i, int(v) + 1])
-                sp_tile_sizes_dict[note] = pow(2, level_program[i, num_primes + 1])
+                    tile_sizes_dict[note] *= pow(int(k), level_program[i, int(v) + 1]) # each step row have prime factor value count for each prime factor
+                sp_tile_sizes_dict[note] = pow(2, level_program[i, num_primes + 1]) #TODO: why 2?
 
             permutation = ''
             for i in range(steps_per_level):
@@ -501,6 +509,7 @@ class Timeloop(object):
             fd.close()
 
     def thread_fun(self, args):
+        # args : program for current sample
         program, pool_idx = args
         arch, problem, map = self.get_configs(self.dimension, program)
         self.write_config(arch, problem, map, arch_path=self.arch_path[pool_idx],
@@ -524,6 +533,7 @@ class Timeloop(object):
             return fitness
 
     def run(self, programs):
+        # program : final_program_seq
         num_samples = programs.shape[0]
         pool = ProcessPoolExecutor(num_samples)
         # pool = None

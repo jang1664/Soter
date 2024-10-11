@@ -1,0 +1,4 @@
+Achieved Fitness: ['-6.97615e+10', '-1.55320e+07', '-4.49146e+03']
+Statistics
+['EDP (uJ cycles)', 'Cycles', 'Energy (pJ)']
+[-69761500446.72, -15532032, -4491.46]

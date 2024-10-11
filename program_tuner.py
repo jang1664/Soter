@@ -58,7 +58,8 @@ class ProgramTransformer(nn.Module):
         # order_log_prob = tile2_logit.new_zeros(num_samples)
         # order_log_prob_mask = tile2_logit.new_zeros(num_samples)
 
-        order_score = order_logit + order_mask
+        # sample order of current (loop indvar, level)
+        order_score = order_logit + order_mask # order mask : make -inf for invalid options
         order_prob = F.softmax(order_score, dim=-1)
         order_density = Categorical(order_prob)
         order_action = order_density.sample()
@@ -86,6 +87,7 @@ class ProgramTransformer(nn.Module):
             sp_tile2_mask_tmp[np.arange(num_samples), sp_tile2_min + tile2_mask.size(-1) - i] = float('-inf')
         sp_tile2_mask = sp_tile2_mask_tmp[:, tile2_mask.size(-1):]
 
+        # sample spatial tiling factor of current (loop indvar, level)
         sp_tile2_score = sp_tile2_logit + sp_tile2_mask
         sp_tile2_prob = F.softmax(sp_tile2_score, dim=-1)
         sp_tile2_density = Categorical(sp_tile2_prob)
@@ -109,6 +111,7 @@ class ProgramTransformer(nn.Module):
             tile2_mask_tmp[np.arange(num_samples), tile2_min + tile2_mask.size(-1) - i] = float('-inf')
         tile2_mask = tile2_mask_tmp[:, tile2_mask.size(-1):]
 
+        # sample temporal tiling factor of current (loop indvar, level)
         tile2_score = tile2_logit + tile2_mask
         tile2_prob = F.softmax(tile2_score, dim=-1)
         tile2_density = Categorical(tile2_prob)
@@ -129,7 +132,7 @@ class ProgramTransformer(nn.Module):
         sp_tile_actions.append(sp_tile2_action)
         log_probs.append(tile2_log_prob)
         log_prob_masks.append(tile2_log_prob_mask)
-        for p in range(1, self.num_primes):
+        for p in range(1, self.num_primes): #TODO: prime??
             remain_buffer_size = remain_buffer_size / torch.pow(int(self.idx2prime[p - 1]), tile_action).float()
             tile_max = torch.log2(torch.clamp(remain_buffer_size, min=1)) / math.log2(int(self.idx2prime[p]))
             tile_max = torch.clamp(tile_max.long(), min=0, max=tile_masks.size(-1) - 1)
@@ -178,6 +181,8 @@ class Tuner:
         self.accelerator = accelerator
         self.cost_model = Timeloop(in_config_path='./SpatialAccelerators', out_config_path=self.timeloop_out_config_path,
                                    accelerator=accelerator, opt_obj=self.opt_obj)
+
+        # dict from dimension string name to int idx
         self.dim2note = self.cost_model.dim2note
         self.len_dimension = len(self.dim2note.values())
 
@@ -202,6 +207,8 @@ class Tuner:
         self.best_program = None
         self.worst_obj = None
 
+        # level -> buffer level
+        #TODO: why two one??
         if 'Simba' in self.accelerator:
             self.level_order = [1, 2, 3, 4, 5, 6, 1]
         elif 'Eyeriss' in self.accelerator:
@@ -211,15 +218,18 @@ class Tuner:
         self.steps_per_level = len(self.dim2note.values())
         self.total_steps = self.num_buf_levels * self.steps_per_level
 
+        #TODO: is it good? constant?
         self.num_samples = 32
         self.max_tile = 30
 
-        self.initial_order_mask = np.zeros((self.num_samples, self.len_dimension + 1), dtype=np.float)
-        self.initial_order_mask[:, -1] = float('-inf')
+        #TODO : why +1?
+        self.initial_order_mask = np.zeros((self.num_samples, self.len_dimension + 1), dtype=float)
+        self.initial_order_mask[:, -1] = float('-inf') #TODO: mask??
 
+        #TODO tile mask?
         self.tile_budgets = np.zeros((self.num_samples, self.len_dimension, self.num_primes), dtype=np.int32)
         self.initial_tile_masks = np.zeros(
-            (self.num_samples, self.len_dimension, self.num_primes, (self.max_tile + 1) * 2), dtype=np.float)
+            (self.num_samples, self.len_dimension, self.num_primes, (self.max_tile + 1) * 2), dtype=float)
 
         # print("buffers_with_spmap", self.buffers_with_spmap)
         for i, key in enumerate(self.dim2note.values()):
@@ -311,7 +321,7 @@ class Tuner:
                 loop_ind, remain_buffer_size, tile2_max, max_temporal_tile2, sp_tile2_max, sp_tile2_min)
 
             if cur_buffer_level < self.num_buf_levels:
-                length = self.num_primes * 2 + 1
+                length = self.num_primes * 2 + 1 # order + temporal tile + spatial tile
                 cur_seq = torch.zeros((self.num_samples, 1, length), dtype=torch.long, device=device)
                 cur_seq[:, 0, 0] = step_order
                 cur_seq[:, 0, 1: self.num_primes + 1] = step_tile

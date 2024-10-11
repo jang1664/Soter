@@ -1,0 +1,121 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "cuda-gdb",
+      "type": "cuda-gdb",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/kernels/test",
+      "program": "${workspaceFolder}/kernels/test/test_gemm_acim_v3"
+    },
+    {
+      "name": "py-gdb",
+      "type": "debugpy",
+      "request": "launch",
+      "cwd": "/root/project/Soter2/metric_space_analysis",
+      "program": "/root/project/Soter2/metric_space_analysis/search.py",
+      "args" : [],
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+    {
+      "name": "gdb",
+      "type": "cppdbg",
+      "request": "launch",
+      "cwd": "/root/temp",
+      "program": "/root/project/accelergy-timeloop-infrastructure/src/timeloop/build/timeloop-model",
+      "args": [
+        "arch.yaml",
+        "problem.yaml",
+        "map.yaml"
+      ],
+      "stopAtEntry": true,
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "setupCommands": [
+        {
+          "description": "gdb에 자동 서식 지정 사용",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        },
+        {
+          "description": "디스어셈블리 버전을 Intel(으)로 설정",
+          "text": "-gdb-set disassembly-flavor intel",
+          "ignoreFailures": true
+        }
+      ]
+    },
+    {
+      "name": "py-cpp-gdb",
+      "type": "pythoncpp",
+      "request": "launch",
+      "pythonConfig": "default",
+      "cppConfig": "default (gdb) Attach",
+    },
+    {
+      "name": "soter debug",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "/root/project/Soter/main.py",
+      "console": "integratedTerminal",
+      "cwd": "/root/project/Soter",
+      "args": [
+        "--optim_obj", 
+        "latency",
+        "--epochs",
+        "10",
+        "--accelerator",
+        "Simba",
+        "--workload",
+        "resnet50",
+        "--layer_id",
+        "43",
+        "--batch_size",
+        "1"
+      ]
+    },
+    {
+      "name": "gdb_timeloop-model",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "/root/project/timeloop/build/timeloop-model",
+      "args": [
+        "arch.yaml",
+        "problem.yaml",
+        "map.yaml"
+      ],
+      "stopAtEntry": false,
+      "cwd": "/root/project/Soter/tmp/out_config_12:17:16/pool-1",
+      "environment": [],
+      "externalConsole": false,
+      "MIMode": "gdb",
+      "miDebuggerPath": "gdb",
+      "setupCommands": [
+        {
+          "description": "gdb에 자동 서식 지정 사용",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        },
+        {
+          "description": "디스어셈블리 버전을 Intel(으)로 설정",
+          "text": "-gdb-set disassembly-flavor intel",
+          "ignoreFailures": true
+        }
+      ]
+    },
+    {
+      "name": "py-gdb-soter",
+      "type": "debugpy",
+      "request": "launch",
+      "cwd": "/root/project/Soter",
+      "program": "/root/project/Soter/main.py",
+      "args" : ["--optim_obj", "edp", "--epochs", "30", "--accelerator", "Simba", "--workload", "bertlarge", "--layer_id", "4", "--batch_size", "1"],
+      "env": {
+        "CUDA_VISIBLE_DEVICES": "1"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": false
+    },
+  ]
+}

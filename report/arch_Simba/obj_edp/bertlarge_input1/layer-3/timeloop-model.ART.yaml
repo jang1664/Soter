@@ -1,0 +1,17 @@
+ART:
+    version: '0.4'
+    tables:
+      - name: System.Chip.PE[0..15].InputBuffer
+        area: 49471.36
+      - name: System.Chip.PE[0..15].WeightBuffer
+        area: 233151.36
+      - name: System.Chip.PE[0..15].AccumulationBuffer
+        area: 17374.08
+      - name: System.Chip.PE[0..15].Registers[0..63]
+        area: 47.84
+      - name: System.Chip.PE[0..15].MACC[0..63]
+        area: 1.0
+      - name: System.Chip.GlobalBuffer
+        area: 176496.384615
+      - name: System.DRAM
+        area: 1.0

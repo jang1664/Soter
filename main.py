@@ -18,14 +18,21 @@ def main():
     layer_id = opt.layer_id
     batch_size = opt.batch_size
 
+    # get workload layer list
     with open(os.path.join(benchmark_dir, '{}_workload/layers.yaml'.format(workload)), 'r') as fd:
         layers = yaml.load(fd, Loader=yaml.SafeLoader)
     fd.close()
 
+    # it is layerwise fine-tunning
     layer = layers[layer_id]
     print(accelerator, workload, batch_size, layer_id, layer)
+
+    # set report directory path
     report_dir = os.path.join(opt.report_dir,  'arch_{}'.format(accelerator), 'obj_{}'.format(opt.optim_obj),
                               '{}_input{}'.format(workload, batch_size), 'layer-{}'.format(layer_id))
+
+    # read layer problem definition and transform problems to convolution form
+    # like BMM, T2D to C2D
     with open(os.path.join(benchmark_dir, '{}_workload/{}.yaml'.format(workload, layer)), 'r') as fd:
         layer_problem = yaml.load(fd, Loader=yaml.SafeLoader)
         problem = {'problem': {
@@ -87,8 +94,11 @@ def main():
         yaml.dump(problem, fd)
     fd.close()
 
+    # make tunner and run
     tuner = Tuner(problem['problem']['instance'], accelerator, report_dir, opt.optim_obj)
     chkpt = tuner.run(opt.epochs)
+
+    # dump checkpoint
     os.makedirs(report_dir, exist_ok=True)
     with open(os.path.join(report_dir, 'env_chkpt.plt'), 'wb') as fd:
         pickle.dump(chkpt, fd)
@@ -103,4 +113,6 @@ if __name__ == '__main__':
 
     parser.add_argument('--accelerator', type=str, default='arch', help='accelerator accelerator')
     parser.add_argument('--workload', type=str, default=None)
-    parser.add_argument('--layer_id
+    parser.add_argument('--layer_id', type=int)
+    parser.add_argument('--batch_size', type=int)
+    main()

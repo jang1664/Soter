@@ -187,7 +187,7 @@ class Transformer(nn.Module):
         # tile7_logit = self.tile7_prj(dec_output)
         # parallel_logit = self.parallel_prj(dec_output)
         tile_logits = []
-        for i in range(self.num_primes):
+        for i in range(self.num_primes): #TODO: (tile_candidate_num x num_primes)
             tile_logits.append(self.tile_prj_list[i](dec_output))
         tile_logits = torch.stack(tile_logits, dim=1)
         sp_tile2_logit = self.sp_tile2_prj(dec_output)

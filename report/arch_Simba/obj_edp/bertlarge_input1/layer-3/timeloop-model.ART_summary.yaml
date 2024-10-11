@@ -1,0 +1,24 @@
+ART_summary:
+    version: '0.4'
+    table_summary:
+      - name: System.Chip.PE[0..15].InputBuffer
+        area: 49471.36
+        primitive_estimations: Aladdin_table
+      - name: System.Chip.PE[0..15].WeightBuffer
+        area: 233151.36
+        primitive_estimations: Aladdin_table
+      - name: System.Chip.PE[0..15].AccumulationBuffer
+        area: 17374.08
+        primitive_estimations: Aladdin_table
+      - name: System.Chip.PE[0..15].Registers[0..63]
+        area: 47.84
+        primitive_estimations: Aladdin_table
+      - name: System.Chip.PE[0..15].MACC[0..63]
+        area: 1.0
+        primitive_estimations: dummy_table
+      - name: System.Chip.GlobalBuffer
+        area: 176496.384615
+        primitive_estimations: CactiSRAM
+      - name: System.DRAM
+        area: 1.0
+        primitive_estimations: dummy_table
