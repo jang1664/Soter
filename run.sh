@@ -14,8 +14,8 @@
 # CUDA_VISIBLE_DEVICES=1 python main.py --optim_obj edp --epochs 30 --accelerator Simba --workload bertlarge --layer_id 2 --batch_size 1
 # cd /root/project/Soter
 
-CUDA_VISIBLE_DEVICES=1 python main.py --optim_obj edp --epochs 30 --accelerator Simba --workload bertlarge --layer_id 3 --batch_size 1
-cd /root/project/Soter
+# CUDA_VISIBLE_DEVICES=1 python main.py --optim_obj edp --epochs 30 --accelerator Simba --workload bertlarge --layer_id 3 --batch_size 1
+# cd /root/project/Soter
 
 CUDA_VISIBLE_DEVICES=1 python main.py --optim_obj edp --epochs 30 --accelerator Simba --workload bertlarge --layer_id 4 --batch_size 1
 cd /root/project/Soter

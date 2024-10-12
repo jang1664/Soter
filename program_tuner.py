@@ -50,6 +50,29 @@ class ProgramTransformer(nn.Module):
 
     def forward(self, program_seq, order_mask, tile_remain_budgets, tile_masks, cur_buffer_level,
                 loop_ind, remain_buffer_size, tile2_max, max_temporal_tile2, sp_tile2_max, sp_tile2_min):
+        """
+        This function is called for each step. If buffer level 3, step per level 2, this function will be called (3*2) times 
+
+        Parameters:
+          program_seq
+            program sequence that currently decided.
+          order_mask:
+            mask for order. If order 3 was selected, then order_mask will make prob of 3 to zero
+          tile_remain_budgets
+          tile_masks
+          cur_buffer_level
+
+        Returns:
+          order_action:
+            order of program.
+          tile_actions:
+            temporal tiling factor of each prime factor
+          sp_tile_actions:
+          log_probs:
+            order prob, temporal tiling factor prob, spatial tiling factor prob
+          log_prob_masks:
+        """
+
         order_logit, tile_logits, sp_tile2_logit = self.transformer(program_seq)
         tile2_logit = tile_logits[:, 0]
         num_samples = program_seq.size(0)
@@ -72,6 +95,7 @@ class ProgramTransformer(nn.Module):
         log_probs[:, 0] = order_log_prob
         log_prob_masks[:, 0] = order_log_prob_mask
 
+        #
         if cur_buffer_level == len(self.buffer_size_list):
             return order_action, None, None, log_probs, log_prob_masks
 
@@ -208,13 +232,16 @@ class Tuner:
         self.worst_obj = None
 
         # level -> buffer level
-        #TODO: why two one??
+        #TODO: why two one?? it seems barrier
+        # it means we need specific level order for each arch. bad..!
         if 'Simba' in self.accelerator:
             self.level_order = [1, 2, 3, 4, 5, 6, 1]
         elif 'Eyeriss' in self.accelerator:
             self.level_order = [4, 5, 1, 2, 3, 6, 1]
         elif 'TensorCore' in self.accelerator:
             self.level_order = [2, 3, 1, 4, 1]
+
+        # each step means dimension
         self.steps_per_level = len(self.dim2note.values())
         self.total_steps = self.num_buf_levels * self.steps_per_level
 
@@ -222,11 +249,18 @@ class Tuner:
         self.num_samples = 32
         self.max_tile = 30
 
-        #TODO : why +1?
+        # order mask will make prob of already selected order to zero
+        # For each level, there are multiple steps(dimensions). we sholuld select order of each dimensions
+        # If 5 dimensions, order will be 0~4. if order 3 was selected, then order mask will make prob of 3 to zero
+        # soter assume temporal and spatial dimension order sholud be same, So there is only one order mask
+        # element idx means order prob. if prob vector is (1 x N) vector, [0,0] is prob of order 0
+        # transformer decoder generate steps_per_level + 1 length vector, So we add +1 for order_mask
         self.initial_order_mask = np.zeros((self.num_samples, self.len_dimension + 1), dtype=float)
-        self.initial_order_mask[:, -1] = float('-inf') #TODO: mask??
+        self.initial_order_mask[:, -1] = float('-inf')
 
-        #TODO tile mask?
+        # tile budget means power number of each prime factor. If X = 2^5 * 3^3, then tile budget of 2 is 5, 3 is 3
+        # tile mask will make prob of not valid tile size. not valid one is decided by series of constraints like remaining ...buffer size, spatial resource size
+        # 0:self.max_tile+1 will be used by explorer. But we allocate more space..?
         self.tile_budgets = np.zeros((self.num_samples, self.len_dimension, self.num_primes), dtype=np.int32)
         self.initial_tile_masks = np.zeros(
             (self.num_samples, self.len_dimension, self.num_primes, (self.max_tile + 1) * 2), dtype=float)
@@ -236,8 +270,14 @@ class Tuner:
             tile_budget = self.dimension_prime[key]
             for k, v in self.prime2idx.items():
                 self.tile_budgets[:, i, v] = tile_budget[k]
+
+                # For each factor, we should mask out bigger than max tile size power factor
                 self.initial_tile_masks[:, i, v, tile_budget[k] + 1:] = float('-inf')
 
+        # program seq is decisions for each step. For each step, we should decide order, tile size, spatial tile size
+        # 1 -> order, num_primes -> tile size, num_primes -> spatial tile size
+        # we make start token. order is steps_per_level, tile size is max_tile, spatial tile size is max_tile for every prime factor
+        # for different steps, order same for step idx, tile size power factor is tile budget for last level, spatial tile size is 0
         length = self.num_primes * 2 + 1
         self.initial_program_seq = np.zeros((self.num_samples, self.total_steps + 1, length), dtype=np.int32)
         self.initial_program_seq[:, 0, 0] = self.steps_per_level
@@ -266,6 +306,20 @@ class Tuner:
             lr_mul=0.01, d_model=512, n_warmup_steps=2)
 
     def run(self, epochs):
+        record = {}
+        arch = self.cost_model.arch
+        problem = self.cost_model.get_problem_configs(self.cost_model.dimension)
+        record["arch"] = arch
+        record["problem"] = problem
+        record["map_record"] = {
+            "epoch" : [],
+            "map" : [],
+            "batch_idx" : [],
+            "cycle" : [],
+            "energy" : [],
+            "edp" : []
+        }
+
         self.explorer.train()
         for ep in range(epochs):
             print('Epoch {}'.format(ep))
@@ -276,6 +330,17 @@ class Tuner:
             latency = fitness[:, 1]
             energy = fitness[:, 2]
             obj_values = fitness[:, 0]
+
+            # log records
+            for i in range(self.num_samples):
+              map = self.cost_model.get_map_config(final_program_seq[0])
+              record["map_record"]["epoch"].append(ep)
+              record["map_record"]["map"].append(map)
+              record["map_record"]["batch_idx"].append(i)
+              record["map_record"]["cycle"].append(latency[i])
+              record["map_record"]["energy"].append(energy[i])
+              record["map_record"]["edp"].append(latency[i] * energy[i])
+
             self.optimization(obj_values, total_rewards, total_log_probs, total_log_prob_masks)
             chkpt = self.record_chkpt(ep == epochs - 1)
             best_idx = np.argmax(obj_values)
@@ -288,9 +353,21 @@ class Tuner:
             print("Achieved obj: ", self.best_obj, obj_values[best_idx], self.best_latency,
                   self.best_energy, (obj_values > float('-inf')).sum())
         self.clean_timeloop_output_files()
+
+        pickle.dump(record, open(os.path.join(self.report_dir, 'record.pkl'), 'wb'))
         return chkpt
 
     def exploration(self):   # Transformer-based
+        """
+      
+        Returns
+        -------
+        final_program_seq.cpu().numpy()
+          tile size, order for total steps
+        total_rewards
+        total_log_probs
+        total_log_prob_masks
+        """
         device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
         self.finished_levels = []
@@ -306,16 +383,24 @@ class Tuner:
         program_seq_disorder = torch.from_numpy(copy.deepcopy(self.initial_program_seq[:, 1:, :])).type(torch.LongTensor).to(device)
         final_program_seq = torch.from_numpy(copy.deepcopy(self.initial_program_seq[:, 1:, :])).type(torch.LongTensor).to(device)
 
+        # explore buffer level. order is set by user
         start_level_order = 0
         cur_buffer_level = self.level_order[start_level_order]
+
+        # mode is step number including buffer level
+        # mode will be incremented by 1 after each step. So order, tile size, spatial tile size will be decided step by step
+        # exploration order of buffer level will be decided by level order (design time parameter)
         mode = (cur_buffer_level - 1) * self.steps_per_level
 
         for time_step in range(self.total_steps):
+            # loop_ind is dimension id for each buffer level
             loop_ind = mode % self.steps_per_level
 
+            # calculate current step constraints
             remain_buffer_size, tile2_max, max_temporal_tile2, sp_tile2_max, sp_tile2_min = self.analysis(
                 program_seq_disorder, tile_remain_budgets, mode, cur_buffer_level, loop_ind)
 
+            # get order, tile size, spatial tile size for current step
             step_order, step_tile, step_parallel, step_log_prob, step_log_prob_mask = self.explorer(
                 program_seq, order_mask, tile_remain_budgets, tile_masks[:, :, :, 0:self.max_tile + 1], cur_buffer_level,
                 loop_ind, remain_buffer_size, tile2_max, max_temporal_tile2, sp_tile2_max, sp_tile2_min)
@@ -327,17 +412,24 @@ class Tuner:
                 cur_seq[:, 0, 1: self.num_primes + 1] = step_tile
                 cur_seq[:, 0, self.num_primes + 1:] = step_parallel
 
+                # concat current step decision to previous seq
                 program_seq = torch.cat((program_seq, cur_seq), dim=1)
 
+                # make program seq without order exploration.
+                #TODO: seq_disorder_ind is same as mode?
                 seq_disorder_ind = (cur_buffer_level - 1) * self.steps_per_level + loop_ind
                 program_seq_disorder[:, seq_disorder_ind, 1: self.num_primes + 1] = step_tile
                 program_seq_disorder[:, seq_disorder_ind, self.num_primes + 1:] = step_parallel
 
+                # set final program seq
                 final_program_seq[:, mode, 0] = step_order
                 final_program_seq[:, mode, 1: self.num_primes + 1] = step_tile
                 final_program_seq[:, mode, self.num_primes + 1:] = step_parallel
 
+                # update order mask
                 order_mask[torch.arange(self.num_samples), step_order] = float('-inf')
+
+                # update tile budget and tile mask considering current budget
                 tile_remain_budgets[:, loop_ind] -= step_tile
 
                 for i in range(1, self.max_tile + 1):
@@ -345,6 +437,7 @@ class Tuner:
                         tile_remain_budget = tile_remain_budgets[:, loop_ind, j]
                         tile_masks[np.arange(self.num_samples), loop_ind, j, tile_remain_budget + i] = float('-inf')
             else:
+                # if current level is last level, just use remain tile budget. spatial is always zero..?
                 step_tile = tile_remain_budgets[:, loop_ind]
                 step_parallel = torch.zeros((self.num_samples, 1), dtype=torch.long, device=device)
 
@@ -366,6 +459,9 @@ class Tuner:
 
                 order_mask[torch.arange(self.num_samples), step_order] = float('-inf')
 
+            # update mode. if mode is multiple of steps_per_level, then move to next buffer level and 
+            # reset order_mask
+            # append finished level
             mode += 1
             if mode % self.steps_per_level == 0:
                 start_level_order += 1
@@ -374,6 +470,7 @@ class Tuner:
                 order_mask = torch.from_numpy(copy.deepcopy(self.initial_order_mask)).type(torch.FloatTensor).to(device)
                 self.finished_levels.append(cur_buffer_level)
 
+            # rewared is sparse.
             total_rewards.append(np.zeros(self.num_samples))
             total_log_probs.append(step_log_prob)
             total_log_prob_masks.append(step_log_prob_mask)
@@ -381,6 +478,8 @@ class Tuner:
         return final_program_seq.cpu().numpy(), total_rewards, total_log_probs, total_log_prob_masks
 
     def analysis(self, program_seq_disorder, tile_remain_budgets, mode, cur_buffer_level, loop_ind):
+        # get remain buffer size for current loop induce variable and current buffer level
+        # we sholud consider current and later buffer level constraints simultaneously
         remain_buffer_size = self.analytical_model.get_remain_buffer_size(cur_buffer_level, program_seq_disorder,
                                                                           loop_ind)
         for later_level in range(cur_buffer_level + 1, len(self.buffer_size_list) + 1):
@@ -388,13 +487,14 @@ class Tuner:
                                                self.analytical_model.get_remain_buffer_size(later_level,
                                                                                             program_seq_disorder,
                                                                                             loop_ind))
+        # get max tile size of power of 2 factor for current loop induce variable and current buffer level
         tile2_max = torch.log2(torch.clamp(remain_buffer_size, min=1))
         tile2_max = torch.clamp(tile2_max.long(), min=0)
         tile2_remain_budgets = tile_remain_budgets[:, :, 0]
         tile2_max = torch.minimum(tile2_max, tile2_remain_budgets[:, loop_ind])
 
         remain_buf_spmap = self.analytical_model.get_remain_buf_spmap(cur_buffer_level, program_seq_disorder)
-        tile2_remain_dimension_budgets = tile2_remain_budgets.sum(dim=-1)
+        tile2_remain_dimension_budgets = tile2_remain_budgets.sum(dim=-1) # sum of power of 2 factor count for every dimension
         max_temporal_tile2 = self.analytical_model.get_max_temporal_size(cur_buffer_level, self.finished_levels,
                                                                          tile2_remain_dimension_budgets,
                                                                          remain_buf_spmap)

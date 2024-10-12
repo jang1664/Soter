@@ -55,6 +55,7 @@ class Decoder(nn.Module):
 
         super().__init__()
 
+        #TODO: why +1?
         self.order_size = order_size + 1
         self.order_emb = nn.Embedding(self.order_size, d_word_vec, padding_idx=pad_idx)
         self.tile_size = tile_size + 1
@@ -177,6 +178,27 @@ class Transformer(nn.Module):
             # self.sp_tile7_prj.weight = self.decoder.sp_tile7_emb.weight
 
     def forward(self, trg_seq):
+        """
+
+          parameters
+          ----------
+
+          Returns
+          -------
+          order_logit:
+            order prob vector. size is [batch, order_size].
+            order size is (step_per_level+1)
+
+          tile_logits:
+            tile prob vector. size is [batch, prime_num, tile_max_size].
+            tile size means the max value of tiling power factor. For example, tile size maximum is 2**7, 7
+            tile logits have prob vector per a prime number.
+
+          sp_tile2_logit:
+            special tile prob vector. size is [batch, tile_max_size].
+            spatial tile has only prime 2, so it is 2D
+
+        """
         # trg_mask = get_pad_mask(trg_seq, self.trg_pad_idx) & get_subsequent_mask(trg_seq)
         trg_mask = None
         dec_output = self.decoder(trg_seq, trg_mask)[:,-1,:]

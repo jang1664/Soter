@@ -6,6 +6,10 @@ import argparse
 import numpy as np
 import random
 
+import cProfile
+import pstats
+import io
+
 from program_tuner import Tuner
 
 
@@ -115,4 +119,10 @@ if __name__ == '__main__':
     parser.add_argument('--workload', type=str, default=None)
     parser.add_argument('--layer_id', type=int)
     parser.add_argument('--batch_size', type=int)
-    main()
+
+    with cProfile.Profile() as pr:
+      main()
+
+      with open(f"profile.txt", "w") as f:
+        stats = pstats.Stats(pr, stream=f)
+        stats.sort_stats('cumtime', 'tottime').print_stats()

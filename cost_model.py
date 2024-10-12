@@ -364,6 +364,8 @@ class Timeloop(object):
 
         print(buffer_name_list, num_instances, buffer_size_list)
 
+        # calculate spatial loop constraint. If global buffer instance num is 2,
+        # and local buffer instance num is 4, then spatial loop constraint is 2.
         sp_cstr = []
         for i in range(len(num_instances) - 1):
             allowed_sp_size = num_instances[i + 1] // num_instances[i]
@@ -383,6 +385,12 @@ class Timeloop(object):
         return {note: value for note, value in zip(self.dim2note.values(), dim_value)}
 
     def get_tp_sp_tile_size(self, dim_value, sp_dim, sp_dim_value, timeloop_notation=True):
+        """
+          dim_value   : dict from dimension name to temporal tile size
+          sp_dim      : spatial loop dimension names
+          sp_dim_vale : dict from dimension name to spatial tile size
+          time_notation : True if timeloop notation, False if numpy array
+        """
         if timeloop_notation:
             temporal_series = []
             spatial_series = []
@@ -391,6 +399,7 @@ class Timeloop(object):
                     temporal_series.append(f'{note}={value}')
                     spatial_series.append(f'{note}=1')
                 else:
+                    # if current dimension is spatial loop dimension, tile size is divided by spatial tile size
                     sp_value = sp_dim_value[note]
                     tp_value = value // sp_value
                     temporal_series.append(f'{note}={tp_value}')
@@ -440,6 +449,10 @@ class Timeloop(object):
         return problem
 
     def get_map_config(self, program):
+        """
+        level : buffer level 
+        step  : temporal or spatial step for a dimension
+        """
         # make map.yaml from program tensor
         steps_per_level = len(self.dim2note.values())
         mapping = []
@@ -447,6 +460,11 @@ class Timeloop(object):
         num_primes = len(self.prime2idx.keys())
         for level in range(1, self.num_buffer_level+1):
             target = self.buffer_name_list[f'l{level}']
+
+            # 0 : order
+            # 1~num_primes : temporal factor
+            # num_primes+1~2*num_primes : spatial factor
+            # it seems that num_primes+2 ~ is not meaningful
             level_program = program[(level-1)*steps_per_level:level*steps_per_level,:] # (steps_per_level, 2*num_primes+1)
             par_dims = set()
             perm_list = copy.deepcopy(list(self.dim2note.values())) # dimension name list
@@ -455,22 +473,41 @@ class Timeloop(object):
             for i in range(steps_per_level):
                 # note = dim2note[level_program[i, 0]]
                 order = level_program[i, 0] # order of current step. current loop indvar order.
-                note = self.dim2note[i]
+                note = self.dim2note[i] # note is dimension name like R, S, P, Q, C, K, H, N
                 perm_list[order] = note # update order from dimension name like N- > M -> K ...
-                if level_program[i, num_primes + 1] >= 1: # temporal loop is more than 1?
+                if level_program[i, num_primes + 1] >= 1: # spatial loop is more than 1?
                     par_dims.add(note)
+
+                # initialize tile size for current dimension. regardless of temporal or spatial
                 tile_sizes_dict[note] = 1
                 for k, v in self.prime2idx.items():
-                    tile_sizes_dict[note] *= pow(int(k), level_program[i, int(v) + 1]) # each step row have prime factor value count for each prime factor
-                sp_tile_sizes_dict[note] = pow(2, level_program[i, num_primes + 1]) #TODO: why 2?
+                    # temporal tile size calculation
+                    # each step row have prime factor value count for each prime factor
+                    # tilze size = 1 * (prime_factor_1^count_1) * (prime_factor_2^count_2) * ...
+                    # if current prime factor is not related to current dimension, count will be 0. So tile size will be multiplied by 1.
+                    tile_sizes_dict[note] *= pow(int(k), level_program[i, int(v) + 1])
+                
+                # spatial tile size calculation
+                #TODO: why 2?. spatial tile size should be power of two??
+                #TODO: why no loop? i think there are num_primes number spaitla factor counts
+                sp_tile_sizes_dict[note] = pow(2, level_program[i, num_primes + 1])
 
+            # temporal and spatial tile loop order must be same
+            #TODO: why same? it seems hidden constraints
             permutation = ''
             for i in range(steps_per_level):
                 permutation += perm_list[i]
             # print(perm_list)
+
+            # make bypass map
+            # bypass map is a map that bypass current buffer level. it comes from mapspace.yaml
             bypass_map = self.mapspace['mapspace']['constraints'][level - 1]
+
+            # calculate temporal and spatial tile size
             tp_tile_sizes, sp_tile_sizes = self.get_tp_sp_tile_size(tile_sizes_dict, par_dims, sp_tile_sizes_dict)
 
+            # add mapping for current level
+            # temporal, spatial, bypass
             cur_map = {'target': target,
                        'type': 'temporal',
                         'factors': tp_tile_sizes,
