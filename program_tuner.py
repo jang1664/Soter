@@ -20,6 +20,11 @@ from transformer.Optim import ScheduledOptim
 from cost_model import Timeloop
 from analytical_model import Model
 
+import argparse
+
+parser = argparse.ArgumentParser(description='Program Tuner')
+parser.add_argument('--random_sample', action='store_true', help='Random sample')
+args, unknown = parser.parse_known_args()
 
 def set_seed(seed):
     torch.manual_seed(seed)
@@ -95,7 +100,6 @@ class ProgramTransformer(nn.Module):
         log_probs[:, 0] = order_log_prob
         log_prob_masks[:, 0] = order_log_prob_mask
 
-        #
         if cur_buffer_level == len(self.buffer_size_list):
             return order_action, None, None, log_probs, log_prob_masks
 
@@ -112,7 +116,10 @@ class ProgramTransformer(nn.Module):
         sp_tile2_mask = sp_tile2_mask_tmp[:, tile2_mask.size(-1):]
 
         # sample spatial tiling factor of current (loop indvar, level)
-        sp_tile2_score = sp_tile2_logit + sp_tile2_mask
+        if not args.random_sample:
+          sp_tile2_score = sp_tile2_logit + sp_tile2_mask
+        else:
+          sp_tile2_score = torch.ones_like(sp_tile2_logit) + sp_tile2_mask
         sp_tile2_prob = F.softmax(sp_tile2_score, dim=-1)
         sp_tile2_density = Categorical(sp_tile2_prob)
         sp_tile2_action = sp_tile2_density.sample()
@@ -136,7 +143,10 @@ class ProgramTransformer(nn.Module):
         tile2_mask = tile2_mask_tmp[:, tile2_mask.size(-1):]
 
         # sample temporal tiling factor of current (loop indvar, level)
-        tile2_score = tile2_logit + tile2_mask
+        if not args.random_sample:
+          tile2_score = tile2_logit + tile2_mask
+        else:
+          tile2_score = torch.ones_like(tile2_logit) + tile2_mask
         tile2_prob = F.softmax(tile2_score, dim=-1)
         tile2_density = Categorical(tile2_prob)
         tile2_action = tile2_density.sample()
@@ -169,7 +179,10 @@ class ProgramTransformer(nn.Module):
             tile_mask = tile_mask_tmp[:, :tile_mask.size(-1)]
 
             tile_logit = tile_logits[:, p]
-            tile_score = tile_logit + tile_mask
+            if not args.random_sample:
+              tile_score = tile_logit + tile_mask
+            else:
+              tile_score = torch.ones_like(tile_logit) + tile_mask
             tile_prob = F.softmax(tile_score, dim=-1)
             tile_density = Categorical(tile_prob)
             tile_action = tile_density.sample()
@@ -278,12 +291,14 @@ class Tuner:
         # 1 -> order, num_primes -> tile size, num_primes -> spatial tile size
         # we make start token. order is steps_per_level, tile size is max_tile, spatial tile size is max_tile for every prime factor
         # for different steps, order same for step idx, tile size power factor is tile budget for last level, spatial tile size is 0
+        # +1 at total step + 1 is for start token(?)
         length = self.num_primes * 2 + 1
         self.initial_program_seq = np.zeros((self.num_samples, self.total_steps + 1, length), dtype=np.int32)
         self.initial_program_seq[:, 0, 0] = self.steps_per_level
         self.initial_program_seq[:, 0, 1: self.num_primes + 1] = self.max_tile
         self.initial_program_seq[:, 0, self.num_primes + 1: self.num_primes + 1 + self.num_primes] = self.max_tile
 
+        # For first, spatial expand factor is one and temporal tile budget is assigned to dram only
         for i in range(self.num_buf_levels):
             for j in range(self.steps_per_level):
                 self.initial_program_seq[:, i * self.steps_per_level + j + 1, 0] = j
@@ -379,8 +394,8 @@ class Tuner:
         tile_remain_budgets = torch.from_numpy(copy.deepcopy(self.tile_budgets)).type(torch.LongTensor).to(device)
         tile_masks = torch.from_numpy(copy.deepcopy(self.initial_tile_masks)).type(torch.FloatTensor).to(device)
 
-        program_seq = torch.from_numpy(copy.deepcopy(self.initial_program_seq[:, :1, :])).type(torch.LongTensor).to(device)
-        program_seq_disorder = torch.from_numpy(copy.deepcopy(self.initial_program_seq[:, 1:, :])).type(torch.LongTensor).to(device)
+        program_seq = torch.from_numpy(copy.deepcopy(self.initial_program_seq[:, :1, :])).type(torch.LongTensor).to(device) # start from start token
+        program_seq_disorder = torch.from_numpy(copy.deepcopy(self.initial_program_seq[:, 1:, :])).type(torch.LongTensor).to(device) # start from first step to end 
         final_program_seq = torch.from_numpy(copy.deepcopy(self.initial_program_seq[:, 1:, :])).type(torch.LongTensor).to(device)
 
         # explore buffer level. order is set by user
@@ -390,6 +405,7 @@ class Tuner:
         # mode is step number including buffer level
         # mode will be incremented by 1 after each step. So order, tile size, spatial tile size will be decided step by step
         # exploration order of buffer level will be decided by level order (design time parameter)
+        # when exploration of current step, program sequence will be updated.
         mode = (cur_buffer_level - 1) * self.steps_per_level
 
         for time_step in range(self.total_steps):
@@ -478,6 +494,30 @@ class Tuner:
         return final_program_seq.cpu().numpy(), total_rewards, total_log_probs, total_log_prob_masks
 
     def analysis(self, program_seq_disorder, tile_remain_budgets, mode, cur_buffer_level, loop_ind):
+        """
+        Parameters
+        ----------
+        program_seq_disorder:
+          program sequence. each step has own temporal factor, spatial factor, order in current buffer level 
+          all tile and spatial factor of previous mode is decided by explorer.
+
+        tile_remain_budgets:
+          For each dimension, how many prime factor remains. It include all level
+        mode:
+
+        cur_buffer_level:
+
+        loop_ind:
+
+        Returns
+        -------
+        remain_buffer_size:
+        tile2_max:
+        max_temporal_tile2:
+        sp_tile2_max:
+        sp_tile2_min:
+        """
+
         # get remain buffer size for current loop induce variable and current buffer level
         # we sholud consider current and later buffer level constraints simultaneously
         remain_buffer_size = self.analytical_model.get_remain_buffer_size(cur_buffer_level, program_seq_disorder,
@@ -488,7 +528,7 @@ class Tuner:
                                                                                             program_seq_disorder,
                                                                                             loop_ind))
         # get max tile size of power of 2 factor for current loop induce variable and current buffer level
-        tile2_max = torch.log2(torch.clamp(remain_buffer_size, min=1))
+        tile2_max = torch.log2(torch.clamp(remain_buffer_size, min=1)) # how can many multiple from previous tile size 
         tile2_max = torch.clamp(tile2_max.long(), min=0)
         tile2_remain_budgets = tile_remain_budgets[:, :, 0]
         tile2_max = torch.minimum(tile2_max, tile2_remain_budgets[:, loop_ind])

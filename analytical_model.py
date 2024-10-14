@@ -31,6 +31,21 @@ class Model(object):
 
 
     def get_remain_buffer_size_for_simba(self, cur_buffer_level, program_seq_disorder, loop_ind):
+        """
+          Calculate the remaining buffer size for current buffer level
+          buffer level one is register, last one is dram
+
+          Returns
+          ------
+          remain_buffer_size:
+            remaining buffer size for current buffer level. this will be compared with later buffer size and selected less one.
+            later buffer level -> to Dram level. so later one sholud have more large remain buffer size.
+        """
+
+        # calculate tile size for each dimension
+        # start from lowest level buffer to one previous level from current level
+        # exploration start from lowest buffer level, so previous tile sizes are already decided, so no problem
+        # but current buffer size can be calculated when current buffer factor is decided, so assume minimum factor for not decided ones
         buffer_size = self.buffer_size_list[f'l{cur_buffer_level}']
         batch_size = program_seq_disorder.size(0)
         tiles = program_seq_disorder.new_ones(batch_size, self.steps_per_level)
@@ -41,6 +56,7 @@ class Model(object):
             for k, v in self.prime2idx.items():
                 tiles *= torch.pow(int(k), level_program_seq_disorder[:, :, v + 1])
 
+        # split the tiles into individual dimensions. each variable is 1D vector with batch dimension
         R, S, P, Q, C, K, H, N = torch.unbind(tiles, dim=1)
         wstride = self.operator_instance['Wstride']
         hstride = self.operator_instance['Hstride']
@@ -61,10 +77,22 @@ class Model(object):
                 R = program_seq_disorder.new_zeros(batch_size)
                 S = program_seq_disorder.new_zeros(batch_size)
 
+        # we will calculate how much tiles of previous buffer level can be stored in current buffer level
+        # when we consider M, K and N factor of current buffer level set at minimum. so weight tile size of current level is same as previous level.
+        # As a result, the number of tiles of previous buffer for input(MK) and output(MN) can be calculated by subtracting weight tile size from buffer size and 
+        # divided by (MK + MN).
+        # If remain buffer size is 5, so we can expand M dimension up to 5 times when assuming K and N are minimum.
+        #TODO: why current level factors that are selected already are not considered in this calculation? we don't need to assum already selected factors as minimum.
+
+        # default expression
         if self.operator_instance['type'] == 'C2D':
+            # tile size for next buffer level
             input_tile = N * ((P - 1) * wstride + 1 + wdilation * (R - 1)) * ((Q - 1) * hstride + 1 + hdilation * (S - 1)) * C * H
             weight_tile = K * R * S * C * H
             output_tile = P * Q * K * N * H
+
+            # calculate current buffer tile size when selecting loop_ind
+            # <dim_name>_sub / <dim_name>_coef is the tile size for current buffer level
             N_sub = weight_tile
             K_sub = input_tile
             C_sub = output_tile
@@ -115,15 +143,17 @@ class Model(object):
             S_coef = (N * hdilation * ((P - 1) * wstride + 1 + wdilation * (R - 1)) * K + K * R * C) * S * H
             H_coef = (P * Q * C * N + K * R * S * C + N * ((P - 1) * wstride + 1 + wdilation * (R - 1)) * (
                         (Q - 1) * hstride + 1 + hdilation * (S - 1)) * K) * H
+
+        # for global buffer we should recalculate the tile sizes
         if cur_buffer_level == 5:  # global buffer
             if self.operator_instance['type'] == 'C2D':
                 input_tile = N * ((P - 1) * wstride + 1 + wdilation * (R - 1)) * (
                         (Q - 1) * hstride + 1 + hdilation * (S - 1)) * C * H
                 weight_tile = program_seq_disorder.new_zeros(batch_size)
                 output_tile = P * Q * K * N * H
-                N_sub = weight_tile
-                K_sub = input_tile
-                C_sub = output_tile
+                N_sub = weight_tile # KN
+                K_sub = input_tile # MK
+                C_sub = output_tile # MN
 
                 P_sub = weight_tile + N * (1 - wstride + wdilation * (R - 1)) * (
                         (Q - 1) * hstride + 1 + hdilation * (S - 1)) * C * H
@@ -136,10 +166,10 @@ class Model(object):
                 H_sub = program_seq_disorder.new_zeros(batch_size).float()
 
                 N_coef = (((P - 1) * wstride + 1 + wdilation * (R - 1)) * (
-                        (Q - 1) * hstride + 1 + hdilation * (S - 1)) * C + P * Q * K) * N * H
-                K_coef = P * Q * N * K * H
+                        (Q - 1) * hstride + 1 + hdilation * (S - 1)) * C + P * Q * K) * N * H # MK + MN
+                K_coef = P * Q * N * K * H # MN
                 C_coef = (N * ((P - 1) * wstride + 1 + wdilation * (R - 1)) * (
-                        (Q - 1) * hstride + 1 + hdilation * (S - 1))) * C * H
+                        (Q - 1) * hstride + 1 + hdilation * (S - 1))) * C * H # MK
                 P_coef = (N * wstride * ((Q - 1) * hstride + 1 + hdilation * (S - 1)) * C + Q * K * N) * P * H
                 Q_coef = (N * hstride * ((P - 1) * wstride + 1 + wdilation * (R - 1)) * C + P * K * N) * Q * H
                 R_coef = (N * wdilation * ((Q - 1) * hstride + 1 + hdilation * (S - 1)) * C) * R * H
@@ -177,7 +207,9 @@ class Model(object):
                 H_coef = (P * Q * C * N + N * ((P - 1) * wstride + 1 + wdilation * (R - 1)) * (
                         (Q - 1) * hstride + 1 + hdilation * (S - 1)) * K) * H
         else:
+            # disable some dimension for some buffer levels
             if cur_buffer_level == 1 or cur_buffer_level == 3:  # pe/reg weight
+                # N, P, Q is unrelated with weight. So for N, P, Q, no buffer size reduction.
                 N = program_seq_disorder.new_zeros(batch_size)
                 P = program_seq_disorder.new_zeros(batch_size)
                 Q = program_seq_disorder.new_zeros(batch_size)
@@ -185,6 +217,7 @@ class Model(object):
                 N_sub = program_seq_disorder.new_zeros(batch_size).float()
                 P_sub = program_seq_disorder.new_zeros(batch_size).float()
                 Q_sub = program_seq_disorder.new_zeros(batch_size).float()
+
                 N_coef = program_seq_disorder.new_ones(batch_size).float().fill_(1e-12)
                 P_coef = program_seq_disorder.new_ones(batch_size).float().fill_(1e-12)
                 Q_coef = program_seq_disorder.new_ones(batch_size).float().fill_(1e-12)
@@ -597,8 +630,14 @@ class Model(object):
 
         return remain_buffer_size
     def get_remain_buf_spmap(self, cur_buffer_level, program_seq_disorder):
+        """
+        calculate how many factor of 2 can be used for spatial.
+        If L2 buffer instance is 2 and L3 buffer instance 16, total spatial tile budget is 8.
+        If previous step use factor of 2, remain factor is 4.
+        we iterate previous steps and calculate how many factor of 2 can be used for spatial.
+        """
         buf_spmap_cstr = self.buf_spmap_cstr[f'l{cur_buffer_level}']
-        start_ind = (cur_buffer_level - 1) * self.steps_per_level
+        start_ind = (cur_buffer_level - 1) * self.steps_per_level # first dim for current buffer level
         end_ind = cur_buffer_level * self.steps_per_level
         level_program_seq_disorder = copy.deepcopy(program_seq_disorder[:, start_ind:end_ind])
         num_samples = program_seq_disorder.size(0)
@@ -612,6 +651,13 @@ class Model(object):
         return remain_buf_spmap
 
     def get_max_temporal_size(self, cur_buffer_level, finished_levels, tile2_remain_dimension_budgets, remain_buf_spmap):
+        """
+        we calculate maximum temporal factor of current buffer level.
+        spatial factor only use factor of 2. and it is good to consume all spatial factor budget.
+        So constraint temporal factor to remaining amount by subtracting spatial factor.
+        Spatial factor can be used across all dimensions, so we first sum factor of 2 for all dimensions and subtract 
+        allowed spatial factors from unfinished buffer level
+        """
         max_temporal_tile2 = tile2_remain_dimension_budgets - torch.log2(torch.clamp(remain_buf_spmap, min=1))
 
         for level in range(1, len(self.buffer_size_list) + 1):
@@ -622,6 +668,15 @@ class Model(object):
 
     def get_spatial_size(self, mode, tile2_max, loop_ind,
                          tile2_remain_budget, remain_buf_spmap):
+        """
+          calculate spatial factor of 2 for current buffer level.
+          We calculated maximum spatial factor from instance number relation. But we have maximum factor 2 of each dim.
+          So we minimize spatial factor of 2 by considering remaining factor 2 count.
+
+          For minimum, if current level is last, set min to max, so no remain spatial factor.
+          Otherwise, calculate remaining factor 2 for other dimensions and subtract them from spatial factor.
+          If the result is more than one, set min to the result, so we ensure spatial factor is consumed exaustivly
+        """
         sp_tile2_max = torch.log2(torch.clamp(remain_buf_spmap, min=1))
         sp_tile2_max = torch.clamp(sp_tile2_max.long(), min=0)
         sp_tile2_max = torch.minimum(sp_tile2_max, tile2_max)

@@ -366,6 +366,8 @@ class Timeloop(object):
 
         # calculate spatial loop constraint. If global buffer instance num is 2,
         # and local buffer instance num is 4, then spatial loop constraint is 2.
+        # If spatial loop factor is 2, then lower buffer level instance should be 2 times of higher buffer level instance. 
+        # i is current level and i+1 is upper level instance, so we calculate i+1/i
         sp_cstr = []
         for i in range(len(num_instances) - 1):
             allowed_sp_size = num_instances[i + 1] // num_instances[i]

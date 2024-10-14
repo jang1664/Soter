@@ -14,7 +14,7 @@ from program_tuner import Tuner
 
 
 def main():
-    opt = parser.parse_args()
+    opt,_ = parser.parse_known_args()
     benchmark_dir = 'Benchmarks'
     accelerator_dir = 'SpatialAccelerators'
     accelerator = opt.accelerator
@@ -33,7 +33,7 @@ def main():
 
     # set report directory path
     report_dir = os.path.join(opt.report_dir,  'arch_{}'.format(accelerator), 'obj_{}'.format(opt.optim_obj),
-                              '{}_input{}'.format(workload, batch_size), 'layer-{}'.format(layer_id))
+                              '{}_input{}'.format(workload, batch_size), 'layer-{}'.format(layer_id), opt.report_dir_postfix)
 
     # read layer problem definition and transform problems to convolution form
     # like BMM, T2D to C2D
@@ -114,6 +114,7 @@ if __name__ == '__main__':
     parser.add_argument('--optim_obj', type=str, default="latency", help='optimization objective')
     parser.add_argument('--epochs', type=int, default=10, help='number of generations/epochs')
     parser.add_argument('--report_dir', type=str, default='./report', help='The report directory')
+    parser.add_argument('--report_dir_postfix', type=str, default='', help='The report directory')
 
     parser.add_argument('--accelerator', type=str, default='arch', help='accelerator accelerator')
     parser.add_argument('--workload', type=str, default=None)

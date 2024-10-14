@@ -1,6 +1,6 @@
 mapping:
-- factors: R=1 S=1 P=1 Q=1 C=1 K=1 H=1 N=256
-  permutation: HKQRNSPC
+- factors: R=1 S=1 P=1 Q=1 C=1 K=1 H=1 N=128
+  permutation: QNHCRSKP
   target: Registers
   type: temporal
 - bypass:
@@ -9,50 +9,50 @@ mapping:
   keep:
   - Weights
   target: Registers
-  type: datatype
-- factors: R=1 S=1 P=1 Q=1 C=2 K=1 H=1 N=1
-  permutation: CKNQHPSR
-  target: AccumulationBuffer
-  type: temporal
-- factors: R=1 S=1 P=1 Q=1 C=16 K=4 H=1 N=1
-  permutation: CKNQHPSR
-  target: AccumulationBuffer
-  type: spatial
-- bypass:
-  - Weights
-  - Inputs
-  keep:
-  - Outputs
-  target: AccumulationBuffer
-  type: datatype
-- factors: R=1 S=1 P=1 Q=1 C=1 K=4 H=1 N=1
-  permutation: QCRKPHNS
-  target: WeightBuffer
-  type: temporal
-- bypass:
-  - Inputs
-  - Outputs
-  keep:
-  - Weights
-  target: WeightBuffer
-  type: datatype
-- factors: R=1 S=1 P=1 Q=1 C=1 K=2 H=1 N=1
-  permutation: RSQKHNCP
-  target: InputBuffer
-  type: temporal
-- bypass:
-  - Weights
-  - Outputs
-  keep:
-  - Inputs
-  target: InputBuffer
   type: datatype
 - factors: R=1 S=1 P=1 Q=1 C=1 K=1 H=1 N=1
-  permutation: SKNRPHCQ
+  permutation: NKQPCRHS
+  target: AccumulationBuffer
+  type: temporal
+- factors: R=1 S=1 P=1 Q=1 C=2 K=16 H=1 N=1
+  permutation: NKQPCRHS
+  target: AccumulationBuffer
+  type: spatial
+- bypass:
+  - Weights
+  - Inputs
+  keep:
+  - Outputs
+  target: AccumulationBuffer
+  type: datatype
+- factors: R=1 S=1 P=1 Q=1 C=32 K=8 H=1 N=1
+  permutation: CKPQRNHS
+  target: WeightBuffer
+  type: temporal
+- bypass:
+  - Inputs
+  - Outputs
+  keep:
+  - Weights
+  target: WeightBuffer
+  type: datatype
+- factors: R=1 S=1 P=1 Q=1 C=1 K=1 H=1 N=1
+  permutation: PRHNQKSC
+  target: InputBuffer
+  type: temporal
+- bypass:
+  - Weights
+  - Outputs
+  keep:
+  - Inputs
+  target: InputBuffer
+  type: datatype
+- factors: R=1 S=1 P=1 Q=1 C=2 K=1 H=1 N=1
+  permutation: CRSNPHKQ
   target: GlobalBuffer
   type: temporal
-- factors: R=1 S=1 P=1 Q=1 C=2 K=4 H=1 N=1
-  permutation: SKNRPHCQ
+- factors: R=1 S=1 P=1 Q=1 C=2 K=2 H=1 N=1
+  permutation: CRSNPHKQ
   target: GlobalBuffer
   type: spatial
 - bypass:
@@ -62,8 +62,8 @@ mapping:
   - Outputs
   target: GlobalBuffer
   type: datatype
-- factors: R=1 S=1 P=1 Q=1 C=1 K=4 H=256 N=2
-  permutation: PRKNHQSC
+- factors: R=1 S=1 P=1 Q=1 C=4 K=16 H=1 N=4
+  permutation: HSRCKNQP
   target: DRAM
   type: temporal
 - keep:
