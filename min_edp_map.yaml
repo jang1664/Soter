@@ -1,6 +1,6 @@
 mapping:
-- factors: R=1 S=1 P=1 Q=1 C=1 K=1 H=1 N=128
-  permutation: QNHCRSKP
+- factors: R=1 S=1 P=1 Q=1 C=1 K=1 H=1 N=2
+  permutation: SRCKHQPN
   target: Registers
   type: temporal
 - bypass:
@@ -10,12 +10,12 @@ mapping:
   - Weights
   target: Registers
   type: datatype
-- factors: R=1 S=1 P=1 Q=1 C=1 K=1 H=1 N=1
-  permutation: NKQPCRHS
+- factors: R=1 S=1 P=1 Q=1 C=128 K=4 H=1 N=1
+  permutation: PSNQRCKH
   target: AccumulationBuffer
   type: temporal
-- factors: R=1 S=1 P=1 Q=1 C=2 K=16 H=1 N=1
-  permutation: NKQPCRHS
+- factors: R=1 S=1 P=1 Q=1 C=8 K=2 H=1 N=4
+  permutation: PSNQRCKH
   target: AccumulationBuffer
   type: spatial
 - bypass:
@@ -25,8 +25,8 @@ mapping:
   - Outputs
   target: AccumulationBuffer
   type: datatype
-- factors: R=1 S=1 P=1 Q=1 C=32 K=8 H=1 N=1
-  permutation: CKPQRNHS
+- factors: R=1 S=1 P=1 Q=1 C=1 K=4 H=1 N=1
+  permutation: KPSRCHQN
   target: WeightBuffer
   type: temporal
 - bypass:
@@ -35,24 +35,24 @@ mapping:
   keep:
   - Weights
   target: WeightBuffer
+  type: datatype
+- factors: R=1 S=1 P=1 Q=1 C=1 K=4 H=1 N=1
+  permutation: CPRSQKHN
+  target: InputBuffer
+  type: temporal
+- bypass:
+  - Weights
+  - Outputs
+  keep:
+  - Inputs
+  target: InputBuffer
   type: datatype
 - factors: R=1 S=1 P=1 Q=1 C=1 K=1 H=1 N=1
-  permutation: PRHNQKSC
-  target: InputBuffer
-  type: temporal
-- bypass:
-  - Weights
-  - Outputs
-  keep:
-  - Inputs
-  target: InputBuffer
-  type: datatype
-- factors: R=1 S=1 P=1 Q=1 C=2 K=1 H=1 N=1
-  permutation: CRSNPHKQ
+  permutation: SCNRHKPQ
   target: GlobalBuffer
   type: temporal
-- factors: R=1 S=1 P=1 Q=1 C=2 K=2 H=1 N=1
-  permutation: CRSNPHKQ
+- factors: R=1 S=1 P=1 Q=1 C=1 K=1 H=1 N=4
+  permutation: SCNRHKPQ
   target: GlobalBuffer
   type: spatial
 - bypass:
@@ -62,8 +62,8 @@ mapping:
   - Outputs
   target: GlobalBuffer
   type: datatype
-- factors: R=1 S=1 P=1 Q=1 C=4 K=16 H=1 N=4
-  permutation: HSRCKNQP
+- factors: R=1 S=1 P=1 Q=1 C=1 K=32 H=1 N=16
+  permutation: HSNKPRQC
   target: DRAM
   type: temporal
 - keep:
