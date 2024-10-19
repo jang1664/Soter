@@ -9,6 +9,7 @@ import random
 import cProfile
 import pstats
 import io
+import time
 
 from program_tuner import Tuner
 
@@ -121,9 +122,15 @@ if __name__ == '__main__':
     parser.add_argument('--layer_id', type=int)
     parser.add_argument('--batch_size', type=int)
 
+    args = parser.parse_args()
+    run_name = f"{args.optim_obj}_{args.epochs}_{args.accelerator}_{args.workload}_{args.layer_id}_{args.batch_size}"
+
+    start = time.time()
     with cProfile.Profile() as pr:
       main()
-
-      with open(f"profile.txt", "w") as f:
+      with open(f"profile_{run_name}.log", "w") as f:
         stats = pstats.Stats(pr, stream=f)
         stats.sort_stats('cumtime', 'tottime').print_stats()
+    end = time.time()
+    with open(f"execution_time_{run_name}.log", "w") as f:
+      f.write(f"time : {end - start}")

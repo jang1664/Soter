@@ -7,6 +7,9 @@ import sys
 from copy import copy, deepcopy
 import numpy as np
 from sklearn.decomposition import PCA
+from mpl_toolkits.mplot3d import Axes3D
+import plotly.graph_objs as go
+
 
 sys.path.append("/root/project/soter_v2")
 sys.path.append("/root/project/soter_v2/metric_space_analysis")
@@ -151,39 +154,59 @@ def doPCAAnalysis(record_path, arch_path, postfix):
   pca = PCA(n_components=2)
   X_pca = pca.fit_transform(np.array(factors))
 
-  # energy
-  plt.figure(figsize=(5,5),constrained_layout=True)
-  plt.scatter(X_pca[:, 0], X_pca[:, 1], c=energys, cmap='viridis', s=5, alpha=0.7)
-  plt.colorbar(label='y')
-  plt.savefig(f"{output_path}/energy_pca.png")
-  plt.close()
+  for name, data in zip(['energy', 'cycle', 'edp'], [energys, cycles, edps]):
+    plt.figure(figsize=(5,5),constrained_layout=True)
+    plt.scatter(X_pca[:, 0], X_pca[:, 1], c=data, cmap='viridis', s=1, alpha=0.7)
+    plt.colorbar(label='y')
+    plt.savefig(f"{output_path}/{name}_pca.png")
+    plt.close()
 
-  # cycle
-  plt.figure(figsize=(5,5),constrained_layout=True)
-  plt.scatter(X_pca[:, 0], X_pca[:, 1], c=cycles, cmap='viridis', s=5, alpha=0.7)
-  plt.colorbar(label='y')
-  plt.savefig(f"{output_path}/cycle_pca.png")
-  plt.close()
+    fig = plt.figure(figsize=(8, 6), constrained_layout=True)
+    ax = fig.add_subplot(111, projection='3d')
+    ax.scatter(X_pca[:, 0], X_pca[:, 1], data, c=data, cmap='viridis', alpha=0.7)
+    ax.set_xlabel('PCA Component 1')
+    ax.set_ylabel('PCA Component 2')
+    ax.set_zlabel(name)
+    plt.savefig(f"{output_path}/{name}_pca_3d.png")
+    plt.close()
 
-  # edp
-  plt.figure(figsize=(5,5),constrained_layout=True)
-  plt.scatter(X_pca[:, 0], X_pca[:, 1], c=edps, cmap='viridis', s=5, alpha=0.7)
-  plt.colorbar(label='y')
-  plt.savefig(f"{output_path}/edp_pca.png")
-  plt.close()
+    # Create a scatter plot
+    scatter = go.Scatter3d(
+        x=X_pca[:, 0], y=X_pca[:, 1], z=data,
+        mode='markers',
+        marker=dict(
+            size=5,
+            color=data,  # Color by Z values
+            colorscale='Viridis',  # Choose a colorscale
+            opacity=0.8
+        )
+    )
+
+    # Set up the layout for the plot
+    layout = go.Layout(
+        scene=dict(
+            xaxis_title='X Axis',
+            yaxis_title='Y Axis',
+            zaxis_title='Z Axis'
+        ),
+        title='Interactive 3D Scatter Plot'
+    )
+
+    fig = go.Figure(data=[scatter], layout=layout)
+    fig.write_html(f"{output_path}/{name}_pca_3d.html")
 
 if __name__ == "__main__":
-  # doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-0/ep100/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_0")
-  # doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-0/ep100_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_0")
+  doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-0/ep100/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_0")
+  doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-0/ep100_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_0")
 
-  # doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-3/ep50/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_3")
-  # doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-3/ep50_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_3")
+  doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-3/ep50/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_3")
+  doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-3/ep50_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_3")
 
-  # doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-4/ep50/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_4")
-  # doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-4/ep50_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_4")
+  doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-4/ep50/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_4")
+  doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-4/ep50_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_4")
 
-  # doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-5/ep50/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_5")
-  # doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-5/ep50_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_5")
+  doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-5/ep50/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_5")
+  doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-5/ep50_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_5")
 
   # PCA
   doPCAAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-0/ep100/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_0")
@@ -195,5 +218,5 @@ if __name__ == "__main__":
   doPCAAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-4/ep50/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_4")
   doPCAAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-4/ep50_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_4")
 
-  # doPCAAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-5/ep50/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_5")
-  # doPCAAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-5/ep50_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_5")
+  doPCAAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-5/ep50/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_5")
+  doPCAAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-5/ep50_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_5")
