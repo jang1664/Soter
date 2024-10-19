@@ -12,15 +12,19 @@
       "name": "py-gdb",
       "type": "debugpy",
       "request": "launch",
-      "cwd": "/root/project/soter_v2/metric_space_analysis",
-      "program": "/root/project/soter_v2/metric_space_analysis/search.py",
+      "cwd": "/root/project/Soter/analysis",
+      "program": "/root/project/Soter/analysis/analysis.py",
       "args" : [
-        "-arch", "arch/simba/arch.yaml",
-        "-prob", "problem/bertlarge_layer4.yaml",
-        "-mapspace", "arch/simba/mapspace.yaml",
-        "-map_template", "map_template/min_cycle_map_mkn.yaml",
-        "--report_dir", "./report/bert_layer4_min_cycle"
+        "-arch", "../metric_space_analysis/arch/simba/arch.yaml",
+        "-map", "../metric_space_analysis/map_template/min_edp_map_mkn.yaml"
       ],
+      // "args" : [
+      //   "-arch", "arch/simba/arch.yaml",
+      //   "-prob", "problem/bertlarge_layer4.yaml",
+      //   "-mapspace", "arch/simba/mapspace.yaml",
+      //   "-map_template", "map_template/min_cycle_map_mkn.yaml",
+      //   "--report_dir", "./report/bert_layer4_min_cycle"
+      // ],
       "console": "integratedTerminal",
       "justMyCode": false
     },
