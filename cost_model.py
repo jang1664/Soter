@@ -574,27 +574,40 @@ class Timeloop(object):
     def run(self, programs):
         # program : final_program_seq
         num_samples = programs.shape[0]
-        pool = ProcessPoolExecutor(num_samples)
+        with ProcessPoolExecutor(num_samples) as pool:
+        # pool = ProcessPoolExecutor(num_samples)
         # pool = None
-        self.create_pool_env(num_pools=num_samples)
+          self.create_pool_env(num_pools=num_samples)
 
-        fitness = np.ones((num_samples, len(self.opt_obj))) * np.NINF
+          fitness = np.ones((num_samples, len(self.opt_obj))) * np.NINF
 
-        if not pool:
-            for i, program in enumerate(programs):
-                fit = self.thread_fun((program, 0))
-                fitness[i] = fit
-        else:
-            while (1):
-                try:
-                    fits = list(pool.map(self.thread_fun, zip(programs, np.arange(len(programs)))))
-                    for i, fit in enumerate(fits):
-                        fitness[i] = fit
-                    break
-                except Exception as e:
-                    print(type(e).__name__, e)
-                    pool.shutdown(wait=False)
-                    pool = ProcessPoolExecutor(num_samples)
+          if not pool:
+              for i, program in enumerate(programs):
+                  fit = self.thread_fun((program, 0))
+                  fitness[i] = fit
+          else:
+              try:
+                  fits = list(pool.map(self.thread_fun, zip(programs, np.arange(len(programs)))))
+                  for i, fit in enumerate(fits):
+                      fitness[i] = fit
+              except Exception as e:
+                  print("thread run error occured!!")
+                  print(type(e).__name__, e)
+                  pool.shutdown(wait=True)
+                  for i, program in enumerate(programs):
+                      fit = self.thread_fun((program, 0))
+                      fitness[i] = fit
+              # while (1):
+              #     try:
+              #         fits = list(pool.map(self.thread_fun, zip(programs, np.arange(len(programs)))))
+              #         for i, fit in enumerate(fits):
+              #             fitness[i] = fit
+              #         break
+              #     except Exception as e:
+              #         print("thread run error occured!!")
+              #         print(type(e).__name__, e)
+              #         pool.shutdown(wait=False)
+              #         pool = ProcessPoolExecutor(num_samples)
 
         return fitness
 
