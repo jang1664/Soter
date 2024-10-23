@@ -23,7 +23,8 @@ from analytical_model import Model
 import argparse
 
 parser = argparse.ArgumentParser(description='Program Tuner')
-parser.add_argument('--random_sample', action='store_true', help='Random sample')
+parser.add_argument('--random_factor', action='store_true', help='Random factor sample')
+parser.add_argument('--random_order', action='store_true', help='Random order sample')
 args, unknown = parser.parse_known_args()
 
 def set_seed(seed):
@@ -87,7 +88,10 @@ class ProgramTransformer(nn.Module):
         # order_log_prob_mask = tile2_logit.new_zeros(num_samples)
 
         # sample order of current (loop indvar, level)
-        order_score = order_logit + order_mask # order mask : make -inf for invalid options
+        if args.random_order:
+          order_score = torch.ones_like(order_logit) + order_mask
+        else:
+          order_score = order_logit + order_mask # order mask : make -inf for invalid options
         order_prob = F.softmax(order_score, dim=-1)
         order_density = Categorical(order_prob)
         order_action = order_density.sample()
@@ -116,7 +120,7 @@ class ProgramTransformer(nn.Module):
         sp_tile2_mask = sp_tile2_mask_tmp[:, tile2_mask.size(-1):]
 
         # sample spatial tiling factor of current (loop indvar, level)
-        if not args.random_sample:
+        if not args.random_factor:
           sp_tile2_score = sp_tile2_logit + sp_tile2_mask
         else:
           sp_tile2_score = torch.ones_like(sp_tile2_logit) + sp_tile2_mask
@@ -143,7 +147,7 @@ class ProgramTransformer(nn.Module):
         tile2_mask = tile2_mask_tmp[:, tile2_mask.size(-1):]
 
         # sample temporal tiling factor of current (loop indvar, level)
-        if not args.random_sample:
+        if not args.random_factor:
           tile2_score = tile2_logit + tile2_mask
         else:
           tile2_score = torch.ones_like(tile2_logit) + tile2_mask
@@ -179,7 +183,7 @@ class ProgramTransformer(nn.Module):
             tile_mask = tile_mask_tmp[:, :tile_mask.size(-1)]
 
             tile_logit = tile_logits[:, p]
-            if not args.random_sample:
+            if not args.random_factor:
               tile_score = tile_logit + tile_mask
             else:
               tile_score = torch.ones_like(tile_logit) + tile_mask
@@ -334,6 +338,7 @@ class Tuner:
             "energy" : [],
             "edp" : []
         }
+        record["loss"] = []
 
         self.explorer.train()
         for ep in range(epochs):
@@ -348,7 +353,7 @@ class Tuner:
 
             # log records
             for i in range(self.num_samples):
-              map = self.cost_model.get_map_config(final_program_seq[0])
+              map = self.cost_model.get_map_config(final_program_seq[i])
               record["map_record"]["epoch"].append(ep)
               record["map_record"]["map"].append(map)
               record["map_record"]["batch_idx"].append(i)
@@ -356,7 +361,11 @@ class Tuner:
               record["map_record"]["energy"].append(energy[i])
               record["map_record"]["edp"].append(latency[i] * energy[i])
 
-            self.optimization(obj_values, total_rewards, total_log_probs, total_log_prob_masks)
+            if args.random_factor and args.random_order:
+              loss = None
+            else:
+              loss = self.optimization(obj_values, total_rewards, total_log_probs, total_log_prob_masks)
+            record["loss"].append(loss)
             chkpt = self.record_chkpt(ep == epochs - 1)
             best_idx = np.argmax(obj_values)
             if obj_values[best_idx] > self.best_obj:
@@ -586,6 +595,8 @@ class Tuner:
 
         policy_loss.backward()
         self.optimizer.step_and_update_lr()
+
+        return policy_loss.detach().cpu().numpy()
 
     def create_timeloop_report(self, program, dir_path):
         fitness = self.cost_model.thread_fun((program, 0))

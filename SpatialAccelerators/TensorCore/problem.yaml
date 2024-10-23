@@ -1,10 +1,10 @@
 problem:
   instance:
-    C: 1024
+    C: 4096
     H: 1
     Hdilation: 1
     Hstride: 1
-    K: 4096
+    K: 1024
     N: 512
     P: 1
     Q: 1

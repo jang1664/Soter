@@ -588,6 +588,7 @@ class Timeloop(object):
           else:
               try:
                   fits = list(pool.map(self.thread_fun, zip(programs, np.arange(len(programs)))))
+                  pool.shutdown(wait=True)
                   for i, fit in enumerate(fits):
                       fitness[i] = fit
               except Exception as e:

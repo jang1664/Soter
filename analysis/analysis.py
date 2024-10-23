@@ -70,6 +70,8 @@ def doAnalysis(record_path, arch_path, report_postfix):
 
   #	epoch	map	batch_idx	cycle	energy	edp	topo
   df = pd.DataFrame(new_map_records)
+  df['energy'] = -df['energy']
+  df['cycle'] = -df['cycle']
 
   #cycle	energy	edp
   #min	max	mean	min	max	mean	min	max	mean
@@ -93,8 +95,8 @@ def doAnalysis(record_path, arch_path, report_postfix):
   fd.write(f"df_by_topo length is {len(df_by_topo)}\n")
 
   plt.figure(figsize=(10, 6))
-  # plt.plot(stat_epoch_df.index, stat_epoch_df[('cycle', 'min')], label='Min Cycles')
-  plt.plot(stat_epoch_df.index, stat_epoch_df[('cycle', 'mean')], label='Max Cycles')
+  plt.plot(stat_epoch_df.index, stat_epoch_df[('cycle', 'min')], label='Min Cycles')
+  # plt.plot(stat_epoch_df.index, stat_epoch_df[('cycle', 'mean')], label='mean Cycles')
   plt.xlabel('Epoch')
   plt.ylabel('Cycles')
   plt.legend()
@@ -102,8 +104,8 @@ def doAnalysis(record_path, arch_path, report_postfix):
   plt.close()
 
   plt.figure(figsize=(10, 6))
-  # plt.plot(stat_epoch_df.index, stat_epoch_df[('cycle', 'min')], label='Min Cycles')
-  plt.plot(stat_epoch_df.index, stat_epoch_df[('energy', 'mean')], label='energy')
+  plt.plot(stat_epoch_df.index, stat_epoch_df[('cycle', 'min')], label='Min energy')
+  # plt.plot(stat_epoch_df.index, stat_epoch_df[('energy', 'mean')], label='mean energy')
   plt.xlabel('Epoch')
   plt.ylabel('energy')
   plt.legend()
@@ -111,7 +113,8 @@ def doAnalysis(record_path, arch_path, report_postfix):
   plt.close()
 
   plt.figure(figsize=(10, 6))
-  plt.plot(stat_epoch_df.index, stat_epoch_df[('edp', 'mean')], label='edp')
+  plt.plot(stat_epoch_df.index, stat_epoch_df[('edp', 'min')], label='min edp')
+  # plt.plot(stat_epoch_df.index, stat_epoch_df[('edp', 'mean')], label='mean edp')
   plt.legend()
   plt.savefig(f"{output_path}/{arch_name}_{record_name}_edp.png")
   plt.close()
@@ -167,6 +170,7 @@ def doPCAAnalysis(record_path, arch_path, postfix):
     ax.set_xlabel('PCA Component 1')
     ax.set_ylabel('PCA Component 2')
     ax.set_zlabel(name)
+    # ax.view_init(elev=30, azim=45)  # elev=30 for vertical angle, azim=45 for horizontal angle
     plt.savefig(f"{output_path}/{name}_pca_3d.png")
     plt.close()
 
@@ -195,28 +199,123 @@ def doPCAAnalysis(record_path, arch_path, postfix):
     fig = go.Figure(data=[scatter], layout=layout)
     fig.write_html(f"{output_path}/{name}_pca_3d.html")
 
+def testPCA(record_path, arch_path, postfix):
+  data = pickle.load(open(record_path, "rb"))
+  arch_name = arch_path.split("/")[-2]
+  record_name = record_path.split("/")[-2]
+  output_path = f"{arch_name}_{record_name}_{postfix}"
+  os.makedirs(output_path, exist_ok=True)
+  print(f"PCA Analysis: {record_path} {arch_path}")
+
+  arch = Arch(yaml.load(open(arch_path, "r"), Loader=yaml.FullLoader))
+  prob_desc = ProblemDesc(ProblemDesc.convertToMKN(data["problem"]))
+
+  factors = {}
+  for map_inst, energy, cycle in zip(data["map_record"]["map"], data["map_record"]["energy"], data["map_record"]["cycle"]):
+    topo = LoopTopo(arch, prob_desc, LoopTopo.convertToMKN(map_inst))
+    vector = tuple(topo.getProgramVector())
+    if vector not in factors:
+      factors[vector] = {
+        "energy": [],
+        "cycle": [],
+        "edp": []
+      }
+    factors[vector]["energy"].append(-energy)
+    factors[vector]["cycle"].append(-cycle)
+    factors[vector]["edp"].append(energy * cycle)
+  
+  for key, value in factors.items():
+    if len(value["energy"]) > 1:
+      print(f"key: {key}")
+      print(f"energy: {value['energy']}")
+      print(f"cycle: {value['cycle']}")
+      print(f"edp: {value['edp']}")
+      break
+
+  # pca = PCA(n_components=2)
+  # X_pca = pca.fit_transform(np.array(factors))
+
+def makeRecordToExcel(record_path, arch_path, report_postfix):
+  print(f"Analysis: {record_path} {arch_path}")
+  # arch_name = os.path.basename(arch_path).split(".")[0]
+  # record_name = os.path.basename(record_path).split(".")[0]
+  arch_name = arch_path.split("/")[-2]
+  record_name = record_path.split("/")[-2]
+  output_path = f"{arch_name}_{record_name}_{report_postfix}"
+  os.makedirs(output_path, exist_ok=True)
+
+  fd = open(f"{output_path}/{arch_name}_{record_name}.log", "w")
+  # data = pickle.load(open("report/arch_Simba/obj_edp/bertlarge_input1/layer-4/record.pkl", "rb"))
+  # data = pickle.load(open("report/arch_Simba/obj_edp/bertlarge_input1/layer-4/long_search/record.pkl", "rb"))
+  # data = pickle.load(open("report/arch_Simba/obj_edp/bertlarge_input1/layer-4/long_search_random_search/record.pkl", "rb"))
+  data = pickle.load(open(record_path, "rb"))
+
+  # arch = Arch(yaml.load(open("/root/project/Soter/SpatialAccelerators/Simba/arch.yaml", "r"), Loader=yaml.FullLoader))
+  arch = Arch(yaml.load(open(arch_path, "r"), Loader=yaml.FullLoader))
+
+  prob_desc = ProblemDesc(ProblemDesc.convertToMKN(data["problem"]))
+
+  #insert loop topology column
+  map_records = data["map_record"]
+  new_map_records = deepcopy(map_records)
+  new_map_records["topo"] = []
+  for map_data in new_map_records["map"]:
+    topo = LoopTopo(arch, prob_desc, map_data)
+    new_map_records["topo"].append(topo)
+
+  #	epoch	map	batch_idx	cycle	energy	edp	topo
+  df = pd.DataFrame(new_map_records)
+  df['energy'] = -df['energy']
+  df['cycle'] = -df['cycle']
+
+  df.to_excel(f"temp.xlsx")
+
+
 if __name__ == "__main__":
-  doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-0/ep100/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_0")
-  doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-0/ep100_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_0")
+  # doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-0/ep100/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_0")
+  # doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-0/ep100_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_0")
+  doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-0/ep1000/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_0")
+  doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-0/ep1000_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_0")
+  doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-0/ep1000_true_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_0")
 
-  doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-3/ep50/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_3")
-  doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-3/ep50_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_3")
+  # doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-3/ep50/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_3")
+  # doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-3/ep50_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_3")
 
-  doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-4/ep50/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_4")
-  doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-4/ep50_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_4")
+  # doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-4/ep10/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_4")
+  # doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-4/ep10_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_4")
 
-  doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-5/ep50/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_5")
-  doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-5/ep50_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_5")
+  # doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-4/ep50/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_4")
+  # doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-4/ep50_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_4")
 
+  # doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-4/ep1000/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_4")
+  # doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-4/ep1000_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_4")
+
+  # doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-5/ep50/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_5")
+  # doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-5/ep50_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_5")
+
+  # ====================================================================
   # PCA
-  doPCAAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-0/ep100/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_0")
-  doPCAAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-0/ep100_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_0")
+  # ====================================================================
+  # doPCAAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-0/ep100/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_0")
+  # doPCAAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-0/ep100_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_0")
+  # doPCAAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-0/ep1000/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_0")
+  # doPCAAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-0/ep1000_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_0")
+  # doPCAAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-0/ep1000_true_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_0")
 
-  doPCAAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-3/ep50/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_3")
-  doPCAAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-3/ep50_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_3")
+  # doPCAAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-3/ep50/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_3")
+  # doPCAAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-3/ep50_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_3")
 
-  doPCAAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-4/ep50/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_4")
-  doPCAAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-4/ep50_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_4")
+  # doPCAAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-4/ep10/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_4")
+  # doPCAAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-4/ep10_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_4")
 
-  doPCAAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-5/ep50/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_5")
-  doPCAAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-5/ep50_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_5")
+  # doPCAAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-4/ep50/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_4")
+  # doPCAAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-4/ep50_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_4")
+
+  # doPCAAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-5/ep50/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_5")
+  # doPCAAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-5/ep50_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_5")
+
+  # ====================================================================================
+  # print
+  # ====================================================================================
+  # makeRecordToExcel("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-4/ep1000/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_4")
+  # printRecord("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-4/ep1000_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_4")

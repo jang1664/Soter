@@ -122,15 +122,24 @@ if __name__ == '__main__':
     parser.add_argument('--layer_id', type=int)
     parser.add_argument('--batch_size', type=int)
 
-    args = parser.parse_args()
-    run_name = f"{args.optim_obj}_{args.epochs}_{args.accelerator}_{args.workload}_{args.layer_id}_{args.batch_size}"
+    args, _ = parser.parse_known_args()
+    # run_name = f"{args.optim_obj}_{args.epochs}_{args.accelerator}_{args.workload}_{args.layer_id}_{args.batch_size}"
+
+    benchmark_dir = 'Benchmarks'
+    accelerator_dir = 'SpatialAccelerators'
+    accelerator = args.accelerator
+    workload = args.workload
+    layer_id = args.layer_id
+    batch_size = args.batch_size
+    report_dir = os.path.join(args.report_dir,  'arch_{}'.format(accelerator), 'obj_{}'.format(args.argsim_obj),
+                              '{}_input{}'.format(workload, batch_size), 'layer-{}'.format(layer_id), args.report_dir_postfix)
 
     start = time.time()
     with cProfile.Profile() as pr:
       main()
-      with open(f"profile_{run_name}.log", "w") as f:
+      with open(os.path.join(report_dir, "profile.log"), "w") as f:
         stats = pstats.Stats(pr, stream=f)
         stats.sort_stats('cumtime', 'tottime').print_stats()
     end = time.time()
-    with open(f"execution_time_{run_name}.log", "w") as f:
+    with open(os.path.join(report_dir, "exec_time.log"), "w") as f:
       f.write(f"time : {end - start}")
