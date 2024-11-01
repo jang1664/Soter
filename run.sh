@@ -129,8 +129,20 @@
 # ================================================================================
 # Tensor Core
 # ================================================================================
-layer_ids=(0 3 4 5)
-epochs=(100 1000)
+# layer_ids=(0 3 4 5)
+# epochs=(100 1000)
+# mode=(origin random)
+
+# layer_ids=(0)
+# epochs=(1000)
+# mode=(random)
+
+# layer_ids=(3 4 5)
+# epochs=(100)
+# mode=(origin)
+
+layer_ids=(3 4 5)
+epochs=(1000)
 mode=(origin random)
 
 for layer_id in "${layer_ids[@]}"; do
@@ -141,6 +153,7 @@ for layer_id in "${layer_ids[@]}"; do
       elif [[ $m == "random" ]]; then
         flag="--random_factor --random_order"
       fi
+      echo "RUNNING: Arch=TensorCore, layer_id=${layer_id}, epoch=${epoch}, mode=${m}"
       CUDA_VISIBLE_DEVICES=2 python main.py --optim_obj edp --epochs $epoch --accelerator TensorCore \
         --workload bertlarge --layer_id $layer_id --batch_size 1 \
         --report_dir_postfix ep${epoch}_${m} \
@@ -148,7 +161,8 @@ for layer_id in "${layer_ids[@]}"; do
       cd /root/project/Soter
       find /dev/shm -type f | xargs rm -f
     done
-
+  done
+done
 # CUDA_VISIBLE_DEVICES=2 python main.py --optim_obj edp --epochs 100 --accelerator TensorCore --workload bertlarge --layer_id 0 --batch_size 1 --random_factor --random_order --report_dir_postfix ep100_true_random
 # cd /root/project/Soter
 # find /dev/shm -type f | xargs rm -f

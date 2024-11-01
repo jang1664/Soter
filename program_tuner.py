@@ -365,7 +365,7 @@ class Tuner:
               loss = None
             else:
               loss = self.optimization(obj_values, total_rewards, total_log_probs, total_log_prob_masks)
-            record["loss"].append(loss)
+              record["loss"].append(loss.item())
             chkpt = self.record_chkpt(ep == epochs - 1)
             best_idx = np.argmax(obj_values)
             if obj_values[best_idx] > self.best_obj:

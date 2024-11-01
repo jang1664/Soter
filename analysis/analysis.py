@@ -9,6 +9,8 @@ import numpy as np
 from sklearn.decomposition import PCA
 from mpl_toolkits.mplot3d import Axes3D
 import plotly.graph_objs as go
+import itertools
+import traceback
 
 
 sys.path.append("/root/project/soter_v2")
@@ -95,8 +97,8 @@ def doAnalysis(record_path, arch_path, report_postfix):
   fd.write(f"df_by_topo length is {len(df_by_topo)}\n")
 
   plt.figure(figsize=(10, 6))
-  plt.plot(stat_epoch_df.index, stat_epoch_df[('cycle', 'min')], label='Min Cycles')
-  # plt.plot(stat_epoch_df.index, stat_epoch_df[('cycle', 'mean')], label='mean Cycles')
+  # plt.plot(stat_epoch_df.index, stat_epoch_df[('cycle', 'min')], label='Min Cycles')
+  plt.plot(stat_epoch_df.index, stat_epoch_df[('cycle', 'mean')], label='mean Cycles')
   plt.xlabel('Epoch')
   plt.ylabel('Cycles')
   plt.legend()
@@ -104,8 +106,8 @@ def doAnalysis(record_path, arch_path, report_postfix):
   plt.close()
 
   plt.figure(figsize=(10, 6))
-  plt.plot(stat_epoch_df.index, stat_epoch_df[('cycle', 'min')], label='Min energy')
-  # plt.plot(stat_epoch_df.index, stat_epoch_df[('energy', 'mean')], label='mean energy')
+  # plt.plot(stat_epoch_df.index, stat_epoch_df[('cycle', 'min')], label='Min energy')
+  plt.plot(stat_epoch_df.index, stat_epoch_df[('energy', 'mean')], label='mean energy')
   plt.xlabel('Epoch')
   plt.ylabel('energy')
   plt.legend()
@@ -113,11 +115,20 @@ def doAnalysis(record_path, arch_path, report_postfix):
   plt.close()
 
   plt.figure(figsize=(10, 6))
-  plt.plot(stat_epoch_df.index, stat_epoch_df[('edp', 'min')], label='min edp')
-  # plt.plot(stat_epoch_df.index, stat_epoch_df[('edp', 'mean')], label='mean edp')
+  # plt.plot(stat_epoch_df.index, stat_epoch_df[('edp', 'min')], label='min edp')
+  plt.plot(stat_epoch_df.index, stat_epoch_df[('edp', 'mean')], label='mean edp')
   plt.legend()
   plt.savefig(f"{output_path}/{arch_name}_{record_name}_edp.png")
   plt.close()
+
+  losses = data['loss']
+  if len(losses) > 0:
+    plt.figure(figsize=(10, 6))
+    plt.plot(losses)
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.savefig(f"{output_path}/{arch_name}_{record_name}_loss.png")
+    plt.close()
 
   min_cycle_map = df.loc[df['cycle'].idxmax()]
   min_enery_map = df.loc[df['energy'].idxmax()]
@@ -164,15 +175,33 @@ def doPCAAnalysis(record_path, arch_path, postfix):
     plt.savefig(f"{output_path}/{name}_pca.png")
     plt.close()
 
+    # Normalize z values to map them to a colormap
+    norm = plt.Normalize(min(data), max(data))
+    colors = plt.cm.viridis(norm(data))  # Use viridis colormap (you can choose others)
     fig = plt.figure(figsize=(8, 6), constrained_layout=True)
     ax = fig.add_subplot(111, projection='3d')
-    ax.scatter(X_pca[:, 0], X_pca[:, 1], data, c=data, cmap='viridis', alpha=0.7)
+    x=X_pca[:, 0]
+    y=X_pca[:, 1]
+    z=data
+    for i in range(len(x)):
+        ax.plot([x[i], x[i]], [y[i], y[i]], [0, z[i]], color=colors[i], linewidth=2)
     ax.set_xlabel('PCA Component 1')
     ax.set_ylabel('PCA Component 2')
     ax.set_zlabel(name)
     # ax.view_init(elev=30, azim=45)  # elev=30 for vertical angle, azim=45 for horizontal angle
     plt.savefig(f"{output_path}/{name}_pca_3d.png")
     plt.close()
+
+    # fig = plt.figure(figsize=(8, 6), constrained_layout=True)
+    # ax = fig.add_subplot(111, projection='3d')
+    # # ax.scatter(X_pca[:, 0], X_pca[:, 1], data, c=data, cmap='viridis', alpha=0.7)
+    # ax.plot(X_pca[:, 0], X_pca[:, 1], data)
+    # ax.set_xlabel('PCA Component 1')
+    # ax.set_ylabel('PCA Component 2')
+    # ax.set_zlabel(name)
+    # # ax.view_init(elev=30, azim=45)  # elev=30 for vertical angle, azim=45 for horizontal angle
+    # plt.savefig(f"{output_path}/{name}_pca_3d.png")
+    # plt.close()
 
     # Create a scatter plot
     scatter = go.Scatter3d(
@@ -272,11 +301,39 @@ def makeRecordToExcel(record_path, arch_path, report_postfix):
 
 
 if __name__ == "__main__":
+  # layers = [0, 3, 4, 5]
+  # epochs = [100]
+  # archs = ["TensorCore"]
+  # modes = ["random", "origin"]
+
+  # layers = [0]
+  # epochs = [1000]
+  # archs = ["TensorCore"]
+  # modes = ["random", "origin"]
+
+  # layers = [3, 4, 5]
+  # epochs = [1000]
+  # archs = ["TensorCore"]
+  # modes = ["random", "origin"]
+
+  layers = [0]
+  epochs = [1000]
+  archs = ["TensorCore"]
+  modes = ["origin"]
+
+  for layer, epoch, arch, mode in list(itertools.product(layers, epochs, archs, modes)):
+    try:
+      # doAnalysis(f"../report/arch_{arch}/obj_edp/bertlarge_input1/layer-{layer}/ep{epoch}_{mode}/record.pkl", f"../SpatialAccelerators/{arch}/arch.yaml", f"layer_{layer}")
+      doPCAAnalysis(f"../report/arch_{arch}/obj_edp/bertlarge_input1/layer-{layer}/ep{epoch}_{mode}/record.pkl", f"../SpatialAccelerators/{arch}/arch.yaml", f"layer_{layer}")
+    except Exception as e:
+      print(f"Error: {e}")
+      traceback.print_exc()
+
   # doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-0/ep100/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_0")
   # doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-0/ep100_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_0")
-  doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-0/ep1000/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_0")
-  doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-0/ep1000_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_0")
-  doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-0/ep1000_true_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_0")
+  # doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-0/ep1000/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_0")
+  # doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-0/ep1000_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_0")
+  # doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-0/ep1000_true_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_0")
 
   # doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-3/ep50/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_3")
   # doAnalysis("../report/arch_TensorCore/obj_edp/bertlarge_input1/layer-3/ep50_random/record.pkl", "../SpatialAccelerators/TensorCore/arch.yaml", "layer_3")

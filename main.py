@@ -131,7 +131,7 @@ if __name__ == '__main__':
     workload = args.workload
     layer_id = args.layer_id
     batch_size = args.batch_size
-    report_dir = os.path.join(args.report_dir,  'arch_{}'.format(accelerator), 'obj_{}'.format(args.argsim_obj),
+    report_dir = os.path.join(args.report_dir,  'arch_{}'.format(accelerator), 'obj_{}'.format(args.optim_obj),
                               '{}_input{}'.format(workload, batch_size), 'layer-{}'.format(layer_id), args.report_dir_postfix)
 
     start = time.time()
